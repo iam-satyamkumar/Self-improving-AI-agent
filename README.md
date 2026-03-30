@@ -46,6 +46,7 @@ The system uses an LLM to decide:
   "decision": "RAG",
   "reason": "Query refers to project-specific code"
 }
+```
 
 ---
 
