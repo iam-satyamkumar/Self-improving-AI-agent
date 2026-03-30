@@ -47,7 +47,32 @@ The system uses an LLM to decide:
   "reason": "Query refers to project-specific code"
 }
 
-## 🧪 Setup
+---
 
-```bash
-python -m rag.indexer   # builds FAISS index
+🧪 Setup
+
+# 1. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate   # Mac/Linux
+# venv\Scripts\activate    # Windows
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Create required folders
+mkdir -p data logs sample_codebase
+
+# 4. Add your codebase files inside:
+# sample_codebase/
+
+# 5. Build FAISS index
+python -m rag.indexer
+
+# 6. Start Ollama (separate terminal)
+ollama serve
+
+# 7. Pull lightweight model (first time only)
+ollama run phi3
+
+# 8. Start API server
+uvicorn api.main:app --reload
