@@ -31,7 +31,9 @@ def handle_query(req: QueryRequest):
     if decision["decision"] == "RAG":
         context = retrieve(req.query)
 
-        context_text = "\n\n".join([c["text"] for c in context])
+        context_text = "\n\n".join(
+            [f"FILE: {c['file']}\n{c['text']}" for c in context[:3]]
+        )
 
         prompt = f"""
 You are a senior backend engineer.

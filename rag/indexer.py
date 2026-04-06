@@ -11,8 +11,28 @@ IGNORE_DIRS = ["node_modules", ".git", "venv", "__pycache__", "dist", "build"]
 MAX_CHUNKS = 2000
 
 
-def chunk_text(text, size=CHUNK_SIZE):
-    return [text[i : i + size] for i in range(0, len(text), size)]
+def chunk_code(text):
+    """
+    Split code into logical blocks instead of fixed size
+    """
+    blocks = text.split("\n\n")  # basic logical split
+
+    chunks = []
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        # fallback if block too large
+        if len(block) > CHUNK_SIZE:
+            sub_chunks = [
+                block[i : i + CHUNK_SIZE] for i in range(0, len(block), CHUNK_SIZE)
+            ]
+            chunks.extend(sub_chunks)
+        else:
+            chunks.append(block)
+
+    return chunks
 
 
 def index_codebase():
@@ -31,15 +51,18 @@ def index_codebase():
             with open(path, "r", errors="ignore") as f:
                 content = f.read()
 
-            chunks = chunk_text(content)
+            chunks = chunk_code(content)
 
             for chunk in chunks:
                 documents.append(chunk)
-                metadata.append({"file": path})
+                metadata.append({"file": path, "preview": chunk[:100]})
 
                 if len(documents) > MAX_CHUNKS:
                     print("⚠️ Chunk limit reached")
                     break
+
+            if len(documents) > MAX_CHUNKS:
+                break
     print(f"📊 Total chunks: {len(documents)}")
     print("⚡ Generating embeddings...")
     embeddings = model.encode(documents)
