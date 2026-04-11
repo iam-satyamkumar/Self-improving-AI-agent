@@ -1,6 +1,7 @@
 import requests
 import json
 from datetime import datetime
+import re
 
 LOG_FILE = "logs/decisions.jsonl"
 
@@ -14,7 +15,7 @@ def call_local_llm(prompt):
     try:
         res = requests.post(
             "http://localhost:11434/api/generate",
-            json={"model": "phi3", "prompt": prompt, "stream": False},  # or "phi3"
+            json={"model": "phi3", "prompt": prompt, "stream": False},
             timeout=60,
         )
         print("DEBUG RESPONSE in router.py :", res.text)
@@ -25,34 +26,48 @@ def call_local_llm(prompt):
 
 def safe_parse_json(text):
     """
-    Extract JSON from messy LLM output
+    Extract JSON from messy LLM output (handles ```json blocks)
     """
     try:
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        return json.loads(text[start:end])
+        # remove markdown code blocks if present
+        text = re.sub(r"```json|```", "", text)
+
+        # extract JSON object
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            return json.loads(match.group())
     except:
-        return None
+        pass
+
+    return None
 
 
 def route(query):
+    query_lower = query.lower()
+
+    # 🔥 PRE-CHECK (fast + reliable)
+    if any(x in query_lower for x in ["this project", "this code", "repo"]):
+        result = {"decision": "RAG", "reason": "pre-check: project-specific query"}
+
+        log_decision(
+            {
+                "query": query,
+                "decision": result["decision"],
+                "reason": result["reason"],
+                "source": "heuristic",
+                "time": str(datetime.now()),
+            }
+        )
+
+        return result
+
     prompt = f"""
-You are an intelligent AI system deciding how to answer a query.
+Classify the query.
 
-Your task:
-Decide whether the query needs access to a specific codebase (RAG) or not.
+RAG → if about code, project, debugging
+DIRECT → if general knowledge
 
-Choose:
-- RAG → if the query refers to:
-    * "this project", "this code", "this repo"
-    * debugging, errors, implementation details
-    * internal logic of a system
-- DIRECT → if the query is general knowledge
-
-STRICT RULE:
-If query mentions ANY project-specific wording → ALWAYS choose RAG
-
-Respond ONLY in JSON:
+Respond ONLY as JSON:
 {{"decision": "RAG" or "DIRECT", "reason": "..."}}
 
 Query: {query}
@@ -62,9 +77,21 @@ Query: {query}
 
     parsed = safe_parse_json(raw_output)
 
-    # 🔥 fallback if parsing fails
-    if not parsed or "decision" not in parsed:
-        parsed = {"decision": "DIRECT", "reason": "fallback due to parsing error"}
+    valid_decisions = ["RAG", "DIRECT"]
+
+    # 🔥 fallback
+    if (
+        not parsed
+        or "decision" not in parsed
+        or parsed["decision"] not in valid_decisions
+    ):
+        parsed = {
+            "decision": "DIRECT",
+            "reason": "fallback due to parsing/invalid response",
+        }
+        source = "fallback"
+    else:
+        source = "llm"
 
     log_decision(
         {
@@ -72,6 +99,7 @@ Query: {query}
             "decision": parsed["decision"],
             "reason": parsed["reason"],
             "raw_output": raw_output,
+            "source": source,
             "time": str(datetime.now()),
         }
     )

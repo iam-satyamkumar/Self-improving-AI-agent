@@ -11,12 +11,52 @@ with open("data/meta.pkl", "rb") as f:
     documents, metadata = pickle.load(f)
 
 
-def retrieve(query, k=5):
+def is_useful_chunk(text, query):
+    """
+    Check if chunk is relevant to query using keywords
+    """
+    query_words = query.lower().split()
+
+    # basic keyword overlap
+    return any(word in text.lower() for word in query_words)
+
+
+def retrieve(query, k=20):
     q_emb = model.encode([query])
+
     D, I = index.search(q_emb, k)
 
     results = []
-    for idx in I[0]:
-        results.append({"text": documents[idx], "file": metadata[idx]["file"]})
+    seen = set()
 
-    return results
+    for dist, idx in zip(D[0], I[0]):
+        chunk = documents[idx]
+        file = metadata[idx]["file"]
+
+        # 🔥 1. Skip very weak matches
+        if dist > 1.5:  # you can tune this
+            continue
+
+        # 🔥 2. Skip tiny/useless chunks
+        if len(chunk.strip()) < 30:
+            continue
+
+        # 🔥 3. Keyword relevance check
+        if not is_useful_chunk(chunk, query):
+            continue
+
+        # 🔥 4. Deduplicate
+        if chunk in seen:
+            continue
+        seen.add(chunk)
+
+        results.append({"text": chunk, "file": file, "score": float(dist)})
+
+    # 🔥 fallback if nothing found
+    if not results:
+        for idx in I[0][:3]:
+            results.append(
+                {"text": documents[idx], "file": metadata[idx]["file"], "score": None}
+            )
+
+    return results[:5]

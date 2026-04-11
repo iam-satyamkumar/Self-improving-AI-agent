@@ -11,26 +11,45 @@ IGNORE_DIRS = ["node_modules", ".git", "venv", "__pycache__", "dist", "build"]
 MAX_CHUNKS = 2000
 
 
-def chunk_code(text):
-    """
-    Split code into logical blocks instead of fixed size
-    """
-    blocks = text.split("\n\n")  # basic logical split
+import re
+
+
+def chunk_code(content):
+    lines = content.split("\n")
 
     chunks = []
-    for block in blocks:
-        block = block.strip()
-        if not block:
-            continue
+    buffer = []
+    brace_count = 0
 
-        # fallback if block too large
-        if len(block) > CHUNK_SIZE:
-            sub_chunks = [
-                block[i : i + CHUNK_SIZE] for i in range(0, len(block), CHUNK_SIZE)
-            ]
-            chunks.extend(sub_chunks)
-        else:
-            chunks.append(block)
+    for line in lines:
+        stripped = line.strip()
+
+        # detect function start
+        if (
+            "function " in stripped
+            or "=>" in stripped
+            or stripped.startswith("def ")
+            or stripped.startswith("class ")
+        ):
+            if buffer:
+                chunks.append("\n".join(buffer))
+                buffer = []
+
+            brace_count = 0
+
+        buffer.append(line)
+
+        # track braces (for JS/TS)
+        brace_count += line.count("{")
+        brace_count -= line.count("}")
+
+        # if function block ends
+        if brace_count == 0 and buffer:
+            chunks.append("\n".join(buffer))
+            buffer = []
+
+    if buffer:
+        chunks.append("\n".join(buffer))
 
     return chunks
 

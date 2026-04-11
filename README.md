@@ -67,6 +67,7 @@ mkdir -p data logs sample_codebase
 # sample_codebase/
 
 # 5. Build FAISS index
+rm -rf data/*                
 python -m rag.indexer
 
 # 6. Start Ollama (separate terminal)
